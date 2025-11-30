@@ -39,3 +39,32 @@
 
 # debug information files
 *.dwo
+
+# Qt Creator user configuration
+*.pro.user
+*.pro.user.*
+*.qmake.stash
+CMakeLists.txt.user
+
+# Qt generated files
+ui_*.h
+moc_*.cpp
+qrc_*.cpp
+Makefile*
+
+# Qt Creator build directories
+build-*/
+../build-*/
+
+# In-source build directories (если вдруг сборка внутри папки)
+debug/
+release/
+
+# OS specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE specific (на всякий случай, если откроешь через VSCode)
+.vscode/
+.idea/
