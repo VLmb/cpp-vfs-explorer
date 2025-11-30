@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "../search/FileHashMap.h"
+#include "../search/FileNameTrie.h"
 #include "../utils/PathUtils.h"
 #include "VFSDirectory.h"
 #include "VFSFile.h"
@@ -13,6 +14,7 @@ class VFSExplorer {
   private:
     std::unique_ptr<VFSDirectory> root;
     FileHashMap searchMap;
+    FileNameTrie trie;
 
     VFSDirectory* navigateToDirectory(const std::string& path) const {
         VFSNode* node = navigateToNode(path);
@@ -110,7 +112,7 @@ class VFSExplorer {
     }
 
   public:
-    VFSExplorer() : root(std::make_unique<VFSDirectory>("root")), searchMap() {}
+    VFSExplorer() : root(std::make_unique<VFSDirectory>("root")), searchMap(), trie() {}
 
     VFSDirectory* getRoot() const { return root.get(); }
 
@@ -123,6 +125,7 @@ class VFSExplorer {
 
         auto newDir = std::make_unique<VFSDirectory>(name);
         searchMap.put(name, newDir.get());
+        trie.insert(name);
         parentDir->add(std::move(newDir));
     }
 
@@ -136,6 +139,7 @@ class VFSExplorer {
 
         std::unique_ptr<VFSFile> newFile = std::make_unique<VFSFile>(name, physicalPath);
         searchMap.put(name, newFile.get());
+        trie.insert(name);
         parentDir->add(std::move(newFile));
     }
 
@@ -146,6 +150,7 @@ class VFSExplorer {
             throw std::runtime_error("Node does not exist at path: " + fullPath);
         }
         removeFromMap(nodeToDelete);
+        trie.erase(nodeToDelete->getName());
         parentDir->remove(nodeToDelete->getName());
     }
 
@@ -176,5 +181,9 @@ class VFSExplorer {
         searchMap.put(newName, nodeToRename);
 
         return true;
+    }
+
+    std::vector<std::string> getSuggestions(const std::string& prefix) const {
+        return trie.autoComplete(prefix);
     }
 };
