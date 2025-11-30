@@ -1,0 +1,13 @@
+---
+Language: Cpp
+# Основан на стиле LLVM
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+BreakBeforeBraces: Attach  # Скобки в той же строке
+AllowShortFunctionsOnASingleLine: Inline
+PointerAlignment: Left
+AlignAfterOpenBracket: Align
+---

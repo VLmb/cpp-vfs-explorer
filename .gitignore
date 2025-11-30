@@ -55,6 +55,7 @@ Makefile*
 # Qt Creator build directories
 build-*/
 ../build-*/
+build/
 
 # In-source build directories (если вдруг сборка внутри папки)
 debug/
