@@ -27,3 +27,18 @@ CONFIG += embed_translations
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
+
+INCLUDEPATH += $$PWD/../core
+CONFIG(debug, debug|release) {
+    # Путь для Debug сборки
+    LIBS += -L$$OUT_PWD/../core/debug -lcore
+    PRE_TARGETDEPS += $$OUT_PWD/../core/debug/libcore.a
+} else {
+    # Путь для Release сборки
+    LIBS += -L$$OUT_PWD/../core/release -lcore
+    PRE_TARGETDEPS += $$OUT_PWD/../core/release/libcore.a
+}
+
+win32:CONFIG(release, debug|release): PRE_TARGETDEPS += $$OUT_PWD/../core/release/core.lib
+# else:win32:CONFIG(debug, debug|release): PRE_TARGETDEPS += $$OUT_PWD/../core/debug/core.lib
+else:unix: PRE_TARGETDEPS += $$OUT_PWD/../core/libcore.a

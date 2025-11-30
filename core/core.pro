@@ -4,5 +4,13 @@ CONFIG += staticlib
 TARGET = core
 
 HEADERS += \
+    domain/VFSDirectory.h \
+    domain/VFSExplorer.h \
+    domain/VFSFile.h \
+    domain/VFSNode.h \
     model/VFSDirectory.h \
-    model/VFSFile.h
+    model/VFSFile.h \
+    search/FileHashMap.h \
+    search/FileNameTrie.h \
+    search/Trie.h \
+    utils/PathUtils.h
