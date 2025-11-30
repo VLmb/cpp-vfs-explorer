@@ -7,10 +7,16 @@
 class VFSFile : public VFSNode {
 public:
 
-    VFSFile(std::string name, std::string physicalPath)
-        : VFSNode(std::move(name)), physicalPath(std::move(physicalPath)) {}
+    VFSFile(std::string name, std::string physicalPath): VFSNode(std::move(name)) {
+            if (!std::filesystem::exists(physicalPath)) {
+                throw std::runtime_error("Physical file does not exist: " + physicalPath);
+            }
+            this->physicalPath = std::move(physicalPath);
+        }
 
-    bool isDirectory() const override { return false; }
+    bool isDirectory() const override {
+         return false; 
+    }
 
     size_t getSize() const override {
         std::error_code ec;

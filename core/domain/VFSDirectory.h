@@ -6,7 +6,11 @@
 
 class VFSDirectory : public VFSNode {
 public:
-    using VFSNode::VFSNode;
+    
+    VFSDirectory(std::string name) : 
+        VFSNode(std::move(name)),
+        children() {}
+    
 
     bool isDirectory() const override { 
       return true; 
@@ -38,7 +42,9 @@ public:
 
     VFSNode* getChild(const std::string& name) const {
         for (const auto& child : children) {
-            if (child->getName() == name) return child.get();
+            if (child->getName() == name) {
+                return child.get();
+            }
         }
         return nullptr;
     }

@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
-#include "model/VFSNode.h"
+#include "domain/VFSNode.h"
 #include <list>
 #include <utility>
 
