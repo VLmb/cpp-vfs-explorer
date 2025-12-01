@@ -117,7 +117,7 @@ class VFSExplorer {
 
     VFSDirectory* getRoot() const { return root.get(); }
 
-    void createDirectory(const std::string& parentPath, const std::string& name) {
+    VFSDirectory* createDirectory(const std::string& parentPath, const std::string& name) {
         VFSDirectory* parentDir = navigateToDirectory(parentPath);
 
         if (parentDir->getChild(name)) {
@@ -128,9 +128,10 @@ class VFSExplorer {
         searchMap.put(name, newDir.get());
         trie.insert(name);
         parentDir->add(std::move(newDir));
+        return newDir.get();
     }
 
-    void createFile(const std::string& parentPath, const std::string& name,
+    VFSFile* createFile(const std::string& parentPath, const std::string& name,
                     const std::string& physicalPath) {
         VFSDirectory* parentDir = navigateToDirectory(parentPath);
 
@@ -142,6 +143,7 @@ class VFSExplorer {
         searchMap.put(name, newFile.get());
         trie.insert(name);
         parentDir->add(std::move(newFile));
+        return newFile.get();
     }
 
     void deleteNode(VFSNode* node) {
@@ -214,29 +216,43 @@ class VFSExplorer {
             throw std::runtime_error("Node or new parent is null");
         }
 
+        if (node == newParent) {
+            throw std::runtime_error("Cannot move a folder into itself");
+        }
+
         if (!newParent->isDirectory()) {
             throw std::runtime_error("New parent is not a directory");
         }
 
-        if (node->isDirectory()) {
-            createDirectory(
-                findVirtualPath(newParent),
-                node->getName()
-            );
-        } else {
-            auto* fileNode = static_cast<VFSFile*>(node);
-            createFile(
-                findVirtualPath(newParent),
-                node->getName(),
-                fileNode->getPhysicalPath()
-            );
+        if (newParent->getChild(node->getName())) {
+            throw std::runtime_error("Destination already contains a file/folder with this name");
         }
-        deleteNode(node);
+
+        VFSNode* tmp = newParent;
+        while (tmp) {
+            if (tmp == node) {
+                throw std::runtime_error("Cannot move directory into its own child");
+            }
+            tmp = tmp->getParent();
+        }
+
+        auto* oldParent = static_cast<VFSDirectory*>(node->getParent());
+        if (!oldParent) {
+            throw std::runtime_error("Cannot move root directory or node without parent");
+        }   
+
+        std::unique_ptr<VFSNode> extractedChild = oldParent->extractChild(node->getName());
+
+        if (!extractedChild) {
+            throw std::runtime_error("Node not found in parent's list");
+        }
+        node->setParent(newParent);
+        newParent->add(std::move(extractedChild));
     }
 
     std::string findVirtualPath(VFSNode* node) const {
         if (!node)
-            return nullptr;
+            return "";
 
         if (node == root.get()) {
             return "/";

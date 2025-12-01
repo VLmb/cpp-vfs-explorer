@@ -5,6 +5,10 @@
 #include <vector>
 
 class VFSDirectory : public VFSNode {
+
+private:
+    std::vector<std::unique_ptr<VFSNode>> children;
+
   public:
     VFSDirectory(std::string name, VFSNode* parent = nullptr)
         : VFSNode(std::move(name), parent), children() {}
@@ -44,8 +48,18 @@ class VFSDirectory : public VFSNode {
         return nullptr;
     }
 
-    const std::vector<std::unique_ptr<VFSNode>>& getChildren() const { return children; }
+    const std::vector<std::unique_ptr<VFSNode>>& getChildren() const { 
+        return children;
+    }
 
-  private:
-    std::vector<std::unique_ptr<VFSNode>> children;
+    std::unique_ptr<VFSNode> extractChild(const std::string& name) {
+        for (auto it = children.begin(); it != children.end(); ++it) {
+            if ((*it)->getName() == name) {
+                std::unique_ptr<VFSNode> extractedNode = std::move(*it);
+                children.erase(it);
+                return extractedNode;
+            }
+        }
+        return nullptr;
+    }
 };
