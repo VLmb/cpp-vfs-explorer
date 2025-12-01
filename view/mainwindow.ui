@@ -107,13 +107,13 @@
       <string>Копировать путь </string>
      </property>
     </widget>
-    <widget class="QPushButton" name="btnMountFile">
+    <widget class="QPushButton" name="btnCreateFile">
      <property name="geometry">
       <rect>
        <x>20</x>
        <y>40</y>
        <width>125</width>
-       <height>61</height>
+       <height>30</height>
       </rect>
      </property>
      <property name="text">
@@ -131,6 +131,19 @@
      </property>
      <property name="text">
       <string>Инициализировать</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnMountFile">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>70</y>
+       <width>125</width>
+       <height>30</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Добавить файл</string>
      </property>
     </widget>
    </widget>

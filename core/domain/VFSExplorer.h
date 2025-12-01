@@ -131,7 +131,26 @@ class VFSExplorer {
         return newDir.get();
     }
 
-    VFSFile* createFile(const std::string& parentPath, const std::string& name,
+    void createFile(const std::string& parentPath, const std::string& name,
+                    const std::string& filePath) {
+        try {
+            if (std::filesystem::exists(filePath)) {
+                addFile(parentPath, name, filePath);
+                return;
+            }
+
+            std::ofstream ofs(filePath);
+            if (!ofs) {
+                throw std::runtime_error("Failed to create file at path: " + filePath);
+            }
+            addFile(parentPath, name, filePath);
+
+        } catch (std::filesystem::filesystem_error& e) {
+            throw std::runtime_error("Filesystem error: " + std::string(e.what()));
+        }
+    }
+
+    VFSFile* addFile(const std::string& parentPath, const std::string& name,
                     const std::string& physicalPath) {
         VFSDirectory* parentDir = navigateToDirectory(parentPath);
 

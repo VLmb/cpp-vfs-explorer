@@ -112,7 +112,7 @@ int main() {
 
     // ==================== File Creation Tests ====================
     runner.runTest("Test 11: Create new file", [&]() {
-        VFSFile* newFile = explorer.createFile("/home/documents", "newfile.txt",
+        VFSFile* newFile = explorer.addFile("/home/documents", "newfile.txt",
                                                "core/resources/files/document.txt");
         assertNotNull(newFile, "New file should be created");
         assertEquals("newfile.txt", newFile->getName(), "File name should match");
@@ -121,7 +121,7 @@ int main() {
     runner.runTest("Test 12: Create file with non-existing physical path throws exception", [&]() {
         assertThrows(
             [&]() {
-                explorer.createFile("/home", "badfile.txt", "/non/existing/physical/path.txt");
+                explorer.addFile("/home", "badfile.txt", "/non/existing/physical/path.txt");
             },
             "Physical file does not exist");
     });
@@ -129,7 +129,7 @@ int main() {
     runner.runTest("Test 13: Create file with duplicate name throws exception", [&]() {
         assertThrows(
             [&]() {
-                explorer.createFile("/home/documents", "Tiger.txt",
+                explorer.addFile("/home/documents", "Tiger.txt",
                                     "core/resources/files/Tiger.txt");
             },
             "already exists");
@@ -138,7 +138,7 @@ int main() {
     runner.runTest("Test 14: Create file in non-existing parent throws exception", [&]() {
         assertThrows(
             [&]() {
-                explorer.createFile("/non/existing", "file.txt",
+                explorer.addFile("/non/existing", "file.txt",
                                     "core/resources/files/document.txt");
             },
             "Directory does not exist");

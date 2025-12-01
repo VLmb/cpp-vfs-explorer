@@ -73,6 +73,10 @@ private slots:
 
     VFSDirectory* getTargetDirForItem(QTreeWidgetItem* item);
 
+    void insertSearchCompletion(const QString& completion);
+
+    void on_btnCreateFile_clicked();
+
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 

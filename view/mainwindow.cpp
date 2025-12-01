@@ -18,6 +18,9 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QLineEdit>
+#include <QDialogButtonBox>
+#include <QDir>
 
 
 #include "../core/domain/VFSFile.h"
@@ -113,6 +116,7 @@ public:
             }
         });
 
+
         // Удалить
         connect(deleteButton, &QPushButton::clicked, this, [this]() {
             auto ret = QMessageBox::question(
@@ -149,6 +153,49 @@ private:
     bool m_modified = false;
 };
 
+class CreateFileDialog : public QDialog {
+public:
+    explicit CreateFileDialog(QWidget* parent = nullptr)
+        : QDialog(parent)
+    {
+        setWindowTitle("Создать файл");
+
+        m_virtualNameEdit  = new QLineEdit(this);
+        m_physicalPathEdit = new QLineEdit(this);
+
+        // Значения по умолчанию
+        m_virtualNameEdit->setText("new_file.txt");
+        m_physicalPathEdit->setText(QDir::home().filePath("new_file.txt"));
+
+        auto* form = new QFormLayout;
+        form->addRow("Имя файла в виртуальной системе:", m_virtualNameEdit);
+        form->addRow("Путь к файлу на диске:",           m_physicalPathEdit);
+
+        auto* buttons = new QDialogButtonBox(
+            QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+            Qt::Horizontal,
+            this
+            );
+
+        connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+        auto* mainLayout = new QVBoxLayout;
+        mainLayout->addLayout(form);
+        mainLayout->addWidget(buttons);
+
+        setLayout(mainLayout);
+    }
+
+    QString virtualName() const  { return m_virtualNameEdit->text().trimmed(); }
+    QString physicalPath() const { return m_physicalPathEdit->text().trimmed(); }
+
+private:
+    QLineEdit* m_virtualNameEdit  = nullptr;
+    QLineEdit* m_physicalPathEdit = nullptr;
+};
+
+
 // Конструктор главного окна.
 // Здесь:
 // 1) создаются и настраиваются виджеты из .ui файла (ui->setupUi),
@@ -177,9 +224,25 @@ MainWindow::MainWindow(QWidget *parent)
     searchCompleter = new QCompleter(searchModel, this);
     searchCompleter->setCompletionMode(QCompleter::PopupCompletion); // выпадающий список
     searchCompleter->setCaseSensitivity(Qt::CaseInsensitive);        // без учета регистра
-    searchCompleter->setFilterMode(Qt::MatchContains);               // совпадение по вхождению
+    searchCompleter->setWrapAround(false);
 
-    ui->searchEdit->setCompleter(searchCompleter);
+    auto* model = new QStringListModel(searchCompleter);
+    searchCompleter->setModel(model);
+
+    searchCompleter->setWidget(ui->searchEdit);
+
+    auto* popup = searchCompleter->popup();
+    popup->setMinimumSize(150, 80);
+    popup->setFont(QFont("JetBrains Mono", 10, QFont::Normal));
+
+    popup->installEventFilter(this);
+    ui->searchEdit->installEventFilter(this);
+
+    connect(searchCompleter,
+            QOverload<const QString &>::of(&QCompleter::activated),
+            this,
+            &MainWindow::insertSearchCompletion);
+
 
     // Берем стандартные иконки папки и файла из темы оформления системы.
     // style() — метод QWidget, возвращает текущий QStyle.
@@ -436,7 +499,7 @@ void MainWindow::on_btnMountFile_clicked() {
         // 1) виртуальный путь (директория),
         // 2) виртуальное имя,
         // 3) реальный путь к файлу.
-        explorer.createFile(currentPath, virtName.toStdString(), physicalPath.toStdString());
+        explorer.addFile(currentPath, virtName.toStdString(), physicalPath.toStdString());
 
         // Перерисовываем дерево после изменения.
         refreshTree();
@@ -474,34 +537,43 @@ void MainWindow::on_btnDelete_clicked() {
 // Слот, вызывается при каждом изменении текста в поле поиска.
 // Планируется использовать для автодополнения по Trie.
 void MainWindow::on_searchEdit_textChanged(const QString &arg1) {
-    // Строка префикса для Trie
-    std::string prefix = arg1.toStdString();
+    if (!searchCompleter) return;
 
-    if (prefix.length() < 4) {
-        return;
-    }
+    std::string prefixStd = arg1.toStdString();
 
-    // Очищаем список результатов «медленного» поиска, если был
-    ui->searchResultList->clear();
-
-    // Если ничего не введено — скрываем все подсказки
-    if (prefix.empty()) {
-        searchModel->setStringList(QStringList());
+    if (prefixStd.empty() || prefixStd.length() < 3) {
+        // мало символов — просто прячем popup
+        auto* model = qobject_cast<QStringListModel*>(searchCompleter->model());
+        if (model) model->setStringList(QStringList());
+        searchCompleter->popup()->hide();
         return;
     }
 
     // Получаем подсказки из VFSExplorer
-    std::vector<std::string> suggestions = explorer.getSuggestions(prefix);
+    std::vector<std::string> suggestions = explorer.getSuggestions(prefixStd);
 
-    // Перекладываем в QStringList для модели
     QStringList list;
     list.reserve(static_cast<int>(suggestions.size()));
     for (const auto& s : suggestions) {
         list << QString::fromStdString(s);
     }
 
-    // Обновляем модель комплитера
-    searchModel->setStringList(list);
+    auto* model = qobject_cast<QStringListModel*>(searchCompleter->model());
+    if (!model) return;
+
+    if (list.isEmpty()) {
+        model->setStringList(QStringList());
+        searchCompleter->popup()->hide();
+        return;
+    }
+
+    model->setStringList(list);
+
+    // ВАЖНО: префикс = то, что пользователь ввёл, а не текущая выбранная строка
+    searchCompleter->setCompletionPrefix(arg1);
+
+    // Показываем popup — для QLineEdit можно просто complete() без rect
+    searchCompleter->complete();
 }
 
 // Слот "Быстрый поиск" (по Hash Map / индексу).
@@ -568,6 +640,10 @@ void MainWindow::showNodeInfo(VFSNode* node)
 void MainWindow::showContextMenu(const QPoint &pos) {
     // Создаем контекстное меню. tr() — для поддержки переводов.
     QMenu contextMenu(tr("Context menu"), this);
+
+    QAction actionRename("Переименовать", this);
+    connect(&actionRename, &QAction::triggered, this, &MainWindow::on_btnRename_clicked);
+    contextMenu.addAction(&actionRename);
 
     // Действие "Создать папку".
     QAction actionCreate("Создать папку", this);
@@ -689,6 +765,32 @@ void MainWindow::on_btnCopyPath_clicked()
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
+    if (obj == ui->searchEdit &&
+        event->type() == QEvent::KeyPress &&
+        searchCompleter && searchCompleter->popup()->isVisible()) {
+
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+
+        if (keyEvent->key() == Qt::Key_Tab ||
+            keyEvent->key() == Qt::Key_Return ||
+            keyEvent->key() == Qt::Key_Enter) {
+
+            QAbstractItemView* popup = searchCompleter->popup();
+            QModelIndex idx = popup->currentIndex();
+            QString completion = idx.data(Qt::DisplayRole).toString();
+
+            if (completion.isEmpty()) {
+                completion = searchCompleter->currentCompletion();
+            }
+
+            if (!completion.isEmpty()) {
+                insertSearchCompletion(completion);
+            }
+
+            return true; // событие съели
+        }
+    }
+
     if (obj == ui->fileTree->viewport()) {
 
         // DRAG ENTER
@@ -778,7 +880,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
             // ---- 4.2 Внешний d&d (из проводника) ----
             if (mime->hasUrls()) {
                 VFSDirectory* targetDirNode = getTargetDirForItem(targetItem);
-                // Для createFile у тебя, скорее всего, нужен путь, а не VFSDirectory*,
+                // Для addFile у тебя, скорее всего, нужен путь, а не VFSDirectory*,
                 // тут можно использовать explorer.findVirtualPath(targetDirNode),
                 // если такой метод есть.
                 std::string targetDirPath = explorer.findVirtualPath(targetDirNode);
@@ -793,7 +895,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                     QString virtName = fi.fileName();
 
                     try {
-                        explorer.createFile(targetDirPath,
+                        explorer.addFile(targetDirPath,
                                             virtName.toStdString(),
                                             physicalPath.toStdString());
                     } catch (const std::exception& e) {
@@ -847,3 +949,52 @@ VFSDirectory* MainWindow::getTargetDirForItem(QTreeWidgetItem* item)
 
     return static_cast<VFSDirectory*>(parentNode);
 }
+
+void MainWindow::insertSearchCompletion(const QString& completion)
+{
+    if (!searchCompleter || searchCompleter->widget() != ui->searchEdit) {
+        return;
+    }
+
+    if (completion.isEmpty())
+        return;
+
+    ui->searchEdit->setText(completion);
+    ui->searchEdit->setCursorPosition(completion.length());
+    searchCompleter->popup()->hide();
+}
+
+void MainWindow::on_btnCreateFile_clicked()
+{
+    // В какой виртуальной директории создаём
+    std::string currentPath = getCurrentPath();
+
+    CreateFileDialog dlg(this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return; // нажали Cancel/закрыли окно
+    }
+
+    QString vName        = dlg.virtualName();
+    QString physicalPath = dlg.physicalPath();
+
+    if (vName.isEmpty() || physicalPath.isEmpty()) {
+        QMessageBox::warning(this,
+                             "Создание файла",
+                             "Имя файла и путь к файлу не должны быть пустыми.");
+        return;
+    }
+
+    try {
+        explorer.createFile(
+            currentPath,
+            vName.toStdString(),
+            physicalPath.toStdString()
+            );
+
+        refreshTree();
+        ui->fileTree->expandAll();
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Ошибка создания файла", e.what());
+    }
+}
+

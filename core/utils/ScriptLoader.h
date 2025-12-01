@@ -22,7 +22,7 @@ private:
             std::string parent = PathUtils::getParentPath(vPath);
             std::string name = PathUtils::getFileName(vPath);
             try {
-                exp.createFile(parent, name, rPath);
+                exp.addFile(parent, name, rPath);
                 std::cout << "File created: " << vPath << std::endl;
             } catch (const std::exception& e) {
                 std::cerr << "Failed to create file " << vPath << ": " << e.what() << std::endl;

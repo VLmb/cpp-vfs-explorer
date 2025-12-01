@@ -25,6 +25,9 @@ mkfile /home/projects/cpp_labs/lab2/VFSNode.cpp core/domain/VFSNode.h
 mkfile /home/projects/cpp_labs/lab2/VFSFile.cpp core/domain/VFSFile.h
 mkfile /home/projects/cpp_labs/lab2/utils/ScriptLoader.cpp core/utils/ScriptLoader.h
 
+mkfile /home/projects/java_labs/hw1-hangman/Application.java core/resources/files/Application.java
+mkfile /home/projects/java_labs/hw2-labyrinths/HangmanApp.java core/resources/files/HangmanApp.java
+
 mkfile /home/pictures/BlackCat.jpg core/resources/files/BlackCat.jpg
 mkfile /home/pictures/Hasky.jpg core/resources/files/Hasky.jpg
 mkfile /home/pictures/Leopard.jpg core/resources/files/Leopard.jpg
@@ -32,4 +35,7 @@ mkfile /home/pictures/Headphones.jpg core/resources/files/Headphones.jpg
 mkfile /home/pictures/Tiger.jpg core/resources/files/Tiger.jpg
 
 mkfile /home/documents/Tiger.txt core/resources/files/Tiger.txt
+mkfile /home/documents/document.txt core/resources/files/document.txt
+mkfile /home/documents/Владимир-Ламбатов-Resume.pdf core/resources/files/Владимир-Ламбатов-Resume.pdf
+mkfile /home/documents/Итераторы_C++.docx core/resources/files/Конспект_итераторы_C++.docx
 mkfile /home/documents/document.txt core/resources/files/document.txt
