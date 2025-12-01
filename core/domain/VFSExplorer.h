@@ -49,11 +49,11 @@ class VFSExplorer {
 
             auto* dir = static_cast<VFSDirectory*>(current);
             VFSNode* child = dir->getChild(parts[i]);
-            
+
             if (!child) {
                 return nullptr;
             }
-            
+
             current = child;
         }
 

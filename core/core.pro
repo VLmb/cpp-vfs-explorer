@@ -13,4 +13,13 @@ HEADERS += \
     search/FileHashMap.h \
     search/FileNameTrie.h \
     search/Trie.h \
-    utils/PathUtils.h
+    utils/PathUtils.h \
+    utils/ScriptLoader.h
+
+SUBDIRS += \
+    resources/files/TextEditorApp.pro
+
+DISTFILES += \
+    resources/files/Application.java \
+    resources/files/HangmanApp.java \
+    resources/script.txt

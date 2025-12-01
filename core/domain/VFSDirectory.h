@@ -1,20 +1,15 @@
 #pragma once
 #include "VFSNode.h"
-#include <vector>
-#include <memory>
 #include <algorithm>
+#include <memory>
+#include <vector>
 
 class VFSDirectory : public VFSNode {
-public:
-    
-    VFSDirectory(std::string name) : 
-        VFSNode(std::move(name)),
-        children() {}
-    
+  public:
+    VFSDirectory(std::string name)
+        : VFSNode(std::move(name)), children() {}
 
-    bool isDirectory() const override { 
-      return true; 
-    }
+    bool isDirectory() const override { return true; }
 
     size_t getSize() const override {
         size_t total = 0;
@@ -31,13 +26,13 @@ public:
     }
 
     bool remove(const std::string& name) {
-      for (auto it = children.begin(); it != children.end(); ++it) {
-        if ((*it)->getName() == name) {
-            children.erase(it);  
-            return true;
+        for (auto it = children.begin(); it != children.end(); ++it) {
+            if ((*it)->getName() == name) {
+                children.erase(it);
+                return true;
+            }
         }
-      }
-      return false;
+        return false;
     }
 
     VFSNode* getChild(const std::string& name) const {
@@ -49,10 +44,8 @@ public:
         return nullptr;
     }
 
-    const std::vector<std::unique_ptr<VFSNode>>& getChildren() const {
-        return children;
-    }
+    const std::vector<std::unique_ptr<VFSNode>>& getChildren() const { return children; }
 
-private:
+  private:
     std::vector<std::unique_ptr<VFSNode>> children;
 };

@@ -39,4 +39,27 @@ public:
 
         return parts;
     }
+
+    static std::string getFileName(const std::string& fullPath) {
+        auto parts = split(fullPath);
+        if (parts.empty()) {
+            return "";
+        }
+        return parts.back();
+    }
+
+    static std::string getParentPath(const std::string& fullPath) {
+        auto parts = split(fullPath);
+        if (parts.size() <= 1) {
+            return "/";
+        }
+
+        std::string parentPath;
+        parentPath.reserve(fullPath.size());
+        for (size_t i = 0; i < parts.size() - 1; ++i) {
+        parentPath += "/";
+        parentPath += parts[i];
+    }
+        return parentPath;
+    }
 };

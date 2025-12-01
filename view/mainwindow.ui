@@ -14,115 +14,199 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QLineEdit" name="searchEdit">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>10</y>
-      <width>281</width>
-      <height>24</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>введите имя файла</string>
-    </property>
-   </widget>
    <widget class="QTreeWidget" name="fileTree">
     <property name="geometry">
      <rect>
-      <x>375</x>
-      <y>0</y>
-      <width>421</width>
-      <height>711</height>
+      <x>4</x>
+      <y>4</y>
+      <width>480</width>
+      <height>681</height>
      </rect>
+    </property>
+    <property name="maximumSize">
+     <size>
+      <width>16777215</width>
+      <height>711</height>
+     </size>
     </property>
     <property name="columnCount">
      <number>2</number>
     </property>
     <column>
      <property name="text">
-      <string>Name</string>
+      <string>Имя</string>
      </property>
     </column>
     <column>
      <property name="text">
-      <string>Size</string>
+      <string>Размер</string>
      </property>
     </column>
    </widget>
-   <widget class="QPushButton" name="btnSearchFast">
+   <widget class="QGroupBox" name="groupBox">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>50</y>
-      <width>111</width>
-      <height>41</height>
+      <x>490</x>
+      <y>10</y>
+      <width>300</width>
+      <height>260</height>
+     </rect>
+    </property>
+    <property name="title">
+     <string>Основные действия</string>
+    </property>
+    <widget class="QPushButton" name="btnRename">
+     <property name="geometry">
+      <rect>
+       <x>152</x>
+       <y>110</y>
+       <width>124</width>
+       <height>61</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Переименовать</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnDelete">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>110</y>
+       <width>125</width>
+       <height>61</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Удалить</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnCreateFolder">
+     <property name="geometry">
+      <rect>
+       <x>153</x>
+       <y>40</y>
+       <width>124</width>
+       <height>61</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Создать папку</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnCopyPath">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>180</y>
+       <width>125</width>
+       <height>61</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Копировать путь </string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnMountFile">
+     <property name="geometry">
+      <rect>
+       <x>20</x>
+       <y>40</y>
+       <width>125</width>
+       <height>61</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Создать файл</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnInitFS">
+     <property name="geometry">
+      <rect>
+       <x>152</x>
+       <y>180</y>
+       <width>124</width>
+       <height>61</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Инициализировать</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QGroupBox" name="groupBox_2">
+    <property name="geometry">
+     <rect>
+      <x>490</x>
+      <y>280</y>
+      <width>300</width>
+      <height>430</height>
+     </rect>
+    </property>
+    <property name="title">
+     <string>Поиск в виртуальной системе</string>
+    </property>
+    <widget class="QLineEdit" name="searchEdit">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>30</y>
+       <width>280</width>
+       <height>30</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnSearchSlow">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>64</y>
+       <width>138</width>
+       <height>40</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Поиск файла (Tree)</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnSearchFast">
+     <property name="geometry">
+      <rect>
+       <x>152</x>
+       <y>64</y>
+       <width>138</width>
+       <height>40</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Поиск файла (Hash)</string>
+     </property>
+    </widget>
+    <widget class="QListWidget" name="searchResultList">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>110</y>
+       <width>280</width>
+       <height>310</height>
+      </rect>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QPushButton" name="btnExpandAll">
+    <property name="geometry">
+     <rect>
+      <x>4</x>
+      <y>688</y>
+      <width>480</width>
+      <height>24</height>
      </rect>
     </property>
     <property name="text">
-     <string>Search (Hash)</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="btnSearchSlow">
-    <property name="geometry">
-     <rect>
-      <x>140</x>
-      <y>50</y>
-      <width>111</width>
-      <height>41</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Search (Tree)</string>
-    </property>
-   </widget>
-   <widget class="QListWidget" name="searchResultList">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>120</y>
-      <width>256</width>
-      <height>192</height>
-     </rect>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="btnCreateFolder">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>370</y>
-      <width>131</width>
-      <height>41</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>btnCreateFolder</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="btnMountFile">
-    <property name="geometry">
-     <rect>
-      <x>40</x>
-      <y>440</y>
-      <width>111</width>
-      <height>41</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>btnMountFile</string>
-    </property>
-   </widget>
-   <widget class="QPushButton" name="btnDelete">
-    <property name="geometry">
-     <rect>
-      <x>50</x>
-      <y>520</y>
-      <width>161</width>
-      <height>51</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>btnDelete</string>
+     <string>Развернуть дерево полностью</string>
     </property>
    </widget>
   </widget>
