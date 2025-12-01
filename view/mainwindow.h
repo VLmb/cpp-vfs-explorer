@@ -65,7 +65,16 @@ private slots:
 
     void on_btnExpandAll_clicked();
 
+    void on_btnRename_clicked();
+
+    void on_btnCopyPath_clicked();
+
     void on_fileTree_itemDoubleClicked(QTreeWidgetItem* item, int column);
+
+    VFSDirectory* getTargetDirForItem(QTreeWidgetItem* item);
+
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
     // Указатель на сгенерованный класс UI (из .ui файла).

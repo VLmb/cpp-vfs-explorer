@@ -6,8 +6,8 @@
 
 class VFSDirectory : public VFSNode {
   public:
-    VFSDirectory(std::string name)
-        : VFSNode(std::move(name)), children() {}
+    VFSDirectory(std::string name, VFSNode* parent = nullptr)
+        : VFSNode(std::move(name), parent), children() {}
 
     bool isDirectory() const override { return true; }
 

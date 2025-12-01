@@ -11,6 +11,14 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QInputDialog>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QEvent>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QMimeData>
+
 
 #include "../core/domain/VFSFile.h"
 
@@ -96,10 +104,7 @@ public:
             if (!ok || newName.isEmpty()) return;
 
             try {
-                // ВАРИАНТ 1: если есть метод в explorer
-                m_explorer.renameNode(m_node->getName(), newName.toStdString());
-                // ВАРИАНТ 2 (если renameNode нет) — можешь временно вызвать:
-                // node->rename(newName.toStdString());
+                m_explorer.renameNode(m_node, newName.toStdString());
                 m_modified = true;
 
                 nameValue->setText(newName);
@@ -118,7 +123,7 @@ public:
             if (ret != QMessageBox::Yes) return;
 
             try {
-                m_explorer.deleteNode(m_node->getName());
+                m_explorer.deleteNode(m_node);
                 m_modified = true;
                 accept(); // закрываем диалог
             } catch (const std::exception& e) {
@@ -157,6 +162,13 @@ MainWindow::MainWindow(QWidget *parent)
     // Создаем объект UI и "подшиваем" к этому окну
     // (инициализирует все поля ui->..., которые описаны в .ui).
     ui->setupUi(this);
+
+    ui->fileTree->setDragEnabled(true);                         // можно тянуть элементы
+    ui->fileTree->setAcceptDrops(true);                         // дерево принимает drop
+    ui->fileTree->setDropIndicatorShown(true);
+    ui->fileTree->setDragDropMode(QAbstractItemView::DragDrop); // и drag, и drop
+    ui->fileTree->viewport()->setAcceptDrops(true);
+    ui->fileTree->viewport()->installEventFilter(this);
 
     ui->searchEdit->setPlaceholderText("Введите имя файла...");
 
@@ -253,6 +265,7 @@ void MainWindow::refreshTree() {
 
     // Раскрываем корень, чтобы сразу видеть его содержимое.
     rootItem->setExpanded(true);
+    ui->fileTree->expandAll();
 }
 
 // Рекурсивно обходит дерево VFS и создает элементы в QTreeWidget.
@@ -537,13 +550,13 @@ void MainWindow::showNodeInfo(VFSNode* node)
     if (!node) return;
 
     NodeInfoDialog dlg(node, explorer, this);
-    int result = dlg.exec();
+    dlg.exec();                      // просто ждём закрытия
 
-    if (result != QDialog::Accepted || !dlg.isModified()) {
+    if (!dlg.isModified()) {         // ничего не меняли — выходим
         return;
     }
 
-    // После возможного удаления/переименования — перерисуем дерево
+    // что-то изменили (rename/delete) — перерисовываем и разворачиваем
     refreshTree();
 }
 
@@ -601,4 +614,236 @@ void MainWindow::on_fileTree_itemDoubleClicked(QTreeWidgetItem* item, int)
 void MainWindow::on_btnExpandAll_clicked()
 {
     ui->fileTree->expandAll();
+}
+
+void MainWindow::on_btnRename_clicked()
+{
+    QTreeWidgetItem* item = ui->fileTree->currentItem();
+    if (!item) {
+        QMessageBox::warning(this, "Переименование",
+                             "Выберите объект в дереве.");
+        return;
+    }
+
+    QVariant v = item->data(0, Qt::UserRole);
+    auto* node = static_cast<VFSNode*>(v.value<void*>());
+    if (!node) return;
+
+    bool ok = false;
+    QString newName = QInputDialog::getText(
+        this,
+        "Переименование",
+        "Новое имя:",
+        QLineEdit::Normal,
+        QString::fromStdString(node->getName()),
+        &ok
+        );
+    if (!ok || newName.isEmpty()) return;
+
+    try {
+        // такой же вызов, как в диалоге
+        explorer.renameNode(node, newName.toStdString());
+
+        refreshTree();
+        ui->fileTree->expandAll();
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Ошибка", e.what());
+    }
+}
+
+void MainWindow::on_btnCopyPath_clicked()
+{
+    QTreeWidgetItem* item = ui->fileTree->currentItem();
+    if (!item) {
+        QMessageBox::warning(this, "Копирование пути",
+                             "Выберите файл в дереве.");
+        return;
+    }
+
+    QVariant v = item->data(0, Qt::UserRole);
+    auto* node = static_cast<VFSNode*>(v.value<void*>());
+    if (!node) return;
+
+    // Путь есть только у файла
+    auto* file = dynamic_cast<VFSFile*>(node);
+    if (!file) {
+        QMessageBox::warning(this, "Копирование пути",
+                             "У каталога нет физического пути.");
+        return;
+    }
+
+    QString path = QString::fromStdString(file->getPhysicalPath());
+    if (path.isEmpty()) {
+        QMessageBox::warning(this, "Копирование пути",
+                             "Физический путь пуст.");
+        return;
+    }
+
+    QClipboard* cb = QGuiApplication::clipboard();
+    cb->setText(path);
+
+    // опционально — уведомление
+    QMessageBox::information(this, "Копирование пути",
+                             "Путь скопирован в буфер обмена:\n" + path);
+}
+
+bool MainWindow::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == ui->fileTree->viewport()) {
+
+        // DRAG ENTER
+        if (event->type() == QEvent::DragEnter) {
+            auto* de = static_cast<QDragEnterEvent*>(event);
+            const QMimeData* mime = de->mimeData();
+
+            // Внешние файлы (urls) или внутренний drag от самого дерева
+            auto* src = de->source();
+            if (mime->hasUrls()
+                || src == ui->fileTree
+                || src == ui->fileTree->viewport()) {
+                de->acceptProposedAction();
+                return true;
+            }
+        }
+
+        // DRAG MOVE
+        if (event->type() == QEvent::DragMove) {
+            auto* dm = static_cast<QDragMoveEvent*>(event);
+            const QMimeData* mime = dm->mimeData();
+
+            auto* src = dm->source();
+            if (mime->hasUrls()
+                || src == ui->fileTree
+                || src == ui->fileTree->viewport()) {
+                dm->acceptProposedAction();
+                return true;
+            }
+        }
+
+        // DROP
+        if (event->type() == QEvent::Drop) {
+            auto* drop = static_cast<QDropEvent*>(event);
+            const QMimeData* mime = drop->mimeData();
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            QPoint vpPos = drop->position().toPoint();
+#else
+            QPoint vpPos = drop->pos();
+#endif
+            QTreeWidgetItem* targetItem = ui->fileTree->itemAt(vpPos);
+
+            // ---- 4.1 Внутренний d&d (из нашего дерева) ----
+            if (drop->source() == ui->fileTree) {
+                // Перетаскивали что-то из дерева
+                QTreeWidgetItem* draggedItem = ui->fileTree->currentItem();
+                if (!draggedItem) {
+                    return false;
+                }
+
+                // Узел, который переносим
+                QVariant dv = draggedItem->data(0, Qt::UserRole);
+                auto* draggedNode = static_cast<VFSNode*>(dv.value<void*>());
+                if (!draggedNode) {
+                    return false;
+                }
+
+                // Куда переносим — директория назначения
+                VFSDirectory* targetDirNode = getTargetDirForItem(targetItem);
+                if (!targetDirNode) {
+                    return false;
+                }
+
+                // Можно защититься от перемещения корня
+                if (draggedNode == explorer.getRoot()) {
+                    QMessageBox::warning(this, "Перемещение",
+                                         "Нельзя перемещать корневой каталог.");
+                    return true;
+                }
+
+                try {
+                    explorer.moveNode(draggedNode, targetDirNode);
+                    refreshTree();
+                    ui->fileTree->expandAll();
+                } catch (const std::exception& e) {
+                    QMessageBox::critical(this, "Ошибка перемещения", e.what());
+                    // На всякий случай вернуть дерево в консистентное состояние
+                    refreshTree();
+                    ui->fileTree->expandAll();
+                }
+
+                drop->acceptProposedAction();
+                return true;
+            }
+
+            // ---- 4.2 Внешний d&d (из проводника) ----
+            if (mime->hasUrls()) {
+                VFSDirectory* targetDirNode = getTargetDirForItem(targetItem);
+                // Для createFile у тебя, скорее всего, нужен путь, а не VFSDirectory*,
+                // тут можно использовать explorer.findVirtualPath(targetDirNode),
+                // если такой метод есть.
+                std::string targetDirPath = explorer.findVirtualPath(targetDirNode);
+
+                for (const QUrl& url : mime->urls()) {
+                    if (!url.isLocalFile()) continue;
+
+                    QString physicalPath = url.toLocalFile();
+                    if (physicalPath.isEmpty()) continue;
+
+                    QFileInfo fi(physicalPath);
+                    QString virtName = fi.fileName();
+
+                    try {
+                        explorer.createFile(targetDirPath,
+                                            virtName.toStdString(),
+                                            physicalPath.toStdString());
+                    } catch (const std::exception& e) {
+                        QMessageBox::critical(this, "Ошибка при импорте файла", e.what());
+                    }
+                }
+
+                refreshTree();
+                ui->fileTree->expandAll();
+
+                drop->acceptProposedAction();
+                return true;
+            }
+
+            // Ни внутренний, ни внешние файлы — игнорируем
+        }
+    }
+
+    return QMainWindow::eventFilter(obj, event);
+}
+
+VFSDirectory* MainWindow::getTargetDirForItem(QTreeWidgetItem* item)
+{
+    if (!item) {
+        // Бросили "в пустоту" → корень
+        return explorer.getRoot();
+    }
+
+    QVariant v = item->data(0, Qt::UserRole);
+    auto* node = static_cast<VFSNode*>(v.value<void*>());
+    if (!node) {
+        return explorer.getRoot();
+    }
+
+    if (node->isDirectory()) {
+        // Кидаем прямо в эту директорию
+        return static_cast<VFSDirectory*>(node);
+    }
+
+    // Если это файл — берём его родительский item (директорию)
+    QTreeWidgetItem* parentItem = item->parent();
+    if (!parentItem) {
+        return explorer.getRoot();
+    }
+
+    QVariant pv = parentItem->data(0, Qt::UserRole);
+    auto* parentNode = static_cast<VFSNode*>(pv.value<void*>());
+    if (!parentNode || !parentNode->isDirectory()) {
+        return explorer.getRoot();
+    }
+
+    return static_cast<VFSDirectory*>(parentNode);
 }

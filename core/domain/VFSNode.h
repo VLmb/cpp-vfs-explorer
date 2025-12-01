@@ -6,12 +6,16 @@ class VFSNode {
   public:
     virtual ~VFSNode() = default;
 
-    VFSNode(std::string name)
-        : name(std::move(name)), createdAt(std::time(nullptr)) {}
+    VFSNode(std::string name, VFSNode* parent = nullptr)
+        : name(std::move(name)), parent(parent), createdAt(std::time(nullptr)) {}
 
     std::string getName() const { return name; }
 
     std::time_t getCreationTime() const { return createdAt; }
+
+    VFSNode* getParent() const { return parent; }
+
+    void setParent(VFSNode* newParent) { parent = newParent; }
 
     void rename(const std::string& newName) { name = newName; }
 
@@ -21,4 +25,5 @@ class VFSNode {
   protected:
     std::string name;
     std::time_t createdAt;
+    VFSNode* parent;
 };

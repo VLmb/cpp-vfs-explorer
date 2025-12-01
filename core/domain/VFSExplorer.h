@@ -2,6 +2,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <list>
 
 #include "../search/FileHashMap.h"
 #include "../search/FileNameTrie.h"
@@ -112,7 +113,7 @@ class VFSExplorer {
     }
 
   public:
-    VFSExplorer() : root(std::make_unique<VFSDirectory>("root")), searchMap(), trie() {}
+    VFSExplorer() : root(std::make_unique<VFSDirectory>("root", nullptr)), searchMap(), trie() {}
 
     VFSDirectory* getRoot() const { return root.get(); }
 
@@ -123,7 +124,7 @@ class VFSExplorer {
             throw std::runtime_error("Directory or file with the same name already exists");
         }
 
-        auto newDir = std::make_unique<VFSDirectory>(name);
+        auto newDir = std::make_unique<VFSDirectory>(name, parentDir);
         searchMap.put(name, newDir.get());
         trie.insert(name);
         parentDir->add(std::move(newDir));
@@ -137,10 +138,20 @@ class VFSExplorer {
             throw std::runtime_error("Directory or file with the same name already exists");
         }
 
-        std::unique_ptr<VFSFile> newFile = std::make_unique<VFSFile>(name, physicalPath);
+        std::unique_ptr<VFSFile> newFile = std::make_unique<VFSFile>(name, physicalPath, parentDir);
         searchMap.put(name, newFile.get());
         trie.insert(name);
         parentDir->add(std::move(newFile));
+    }
+
+    void deleteNode(VFSNode* node) {
+        if (!node) {
+            throw std::runtime_error("Node is null");
+        }
+
+        deleteNode(
+            findVirtualPath(node)
+        );
     }
 
     void deleteNode(const std::string& fullPath) {
@@ -165,6 +176,19 @@ class VFSExplorer {
         return results;
     }
 
+    bool renameNode(VFSNode* node, const std::string& newName) {
+        if (!node) {
+            throw std::runtime_error("Node is null");
+        }
+
+        renameNode(
+            findVirtualPath(node),
+            newName
+        );
+
+        return true;
+    }
+
     bool renameNode(const std::string& fullPath, const std::string& newName) {
         VFSDirectory* parentDir = getParentDirectory(fullPath);
         VFSNode* nodeToRename = parentDir->getChild(PathUtils::split(fullPath).back());
@@ -178,9 +202,60 @@ class VFSExplorer {
 
         removeFromMap(nodeToRename);
         nodeToRename->rename(newName);
+        trie.erase(nodeToRename->getName());
+        trie.insert(newName);
         searchMap.put(newName, nodeToRename);
 
         return true;
+    }
+
+    void moveNode(VFSNode* node, VFSDirectory* newParent) {
+        if (!node || !newParent) {
+            throw std::runtime_error("Node or new parent is null");
+        }
+
+        if (!newParent->isDirectory()) {
+            throw std::runtime_error("New parent is not a directory");
+        }
+
+        if (node->isDirectory()) {
+            createDirectory(
+                findVirtualPath(newParent),
+                node->getName()
+            );
+        } else {
+            auto* fileNode = static_cast<VFSFile*>(node);
+            createFile(
+                findVirtualPath(newParent),
+                node->getName(),
+                fileNode->getPhysicalPath()
+            );
+        }
+        deleteNode(node);
+    }
+
+    std::string findVirtualPath(VFSNode* node) const {
+        if (!node)
+            return nullptr;
+
+        if (node == root.get()) {
+            return "/";
+        }
+
+        std::list<std::string> parts;
+        auto current = node;
+
+        while (current && current != root.get()) {
+            parts.push_front(current->getName());
+            current = current->getParent();
+        }
+
+        std::string fullPath;
+        for (const auto& part : parts) {
+            fullPath += "/" + part;
+        }
+
+        return fullPath;
     }
 
     std::vector<std::string> getSuggestions(const std::string& prefix) const {
