@@ -1,8 +1,8 @@
 #pragma once
+#include <list>
 #include <memory>
 #include <utility>
 #include <vector>
-#include <list>
 
 #include "../search/FileHashMap.h"
 #include "../search/FileNameTrie.h"
@@ -26,6 +26,7 @@ class VFSExplorer {
         }
     }
 
+    // unused
     VFSFile* navigateToFile(const std::string& path) const {
         VFSNode* node = navigateToNode(path);
         if (node && !node->isDirectory()) {
@@ -125,10 +126,11 @@ class VFSExplorer {
         }
 
         auto newDir = std::make_unique<VFSDirectory>(name, parentDir);
-        searchMap.put(name, newDir.get());
+        VFSDirectory* result = newDir.get();
+        searchMap.put(name, result);
         trie.insert(name);
         parentDir->add(std::move(newDir));
-        return newDir.get();
+        return result;
     }
 
     void createFile(const std::string& parentPath, const std::string& name,
@@ -151,7 +153,7 @@ class VFSExplorer {
     }
 
     VFSFile* addFile(const std::string& parentPath, const std::string& name,
-                    const std::string& physicalPath) {
+                     const std::string& physicalPath) {
         VFSDirectory* parentDir = navigateToDirectory(parentPath);
 
         if (parentDir->getChild(name)) {
@@ -170,9 +172,7 @@ class VFSExplorer {
             throw std::runtime_error("Node is null");
         }
 
-        deleteNode(
-            findVirtualPath(node)
-        );
+        deleteNode(findVirtualPath(node));
     }
 
     void deleteNode(const std::string& fullPath) {
@@ -190,22 +190,12 @@ class VFSExplorer {
         return searchMap.get(name);
     }
 
-    std::vector<VFSNode*> searchByTraversal(const std::string& name) const {
-        std::vector<VFSNode*> results;
-        searchRecursive(root.get(), name, results);
-
-        return results;
-    }
-
     bool renameNode(VFSNode* node, const std::string& newName) {
         if (!node) {
             throw std::runtime_error("Node is null");
         }
 
-        renameNode(
-            findVirtualPath(node),
-            newName
-        );
+        renameNode(findVirtualPath(node), newName);
 
         return true;
     }
@@ -258,7 +248,7 @@ class VFSExplorer {
         auto* oldParent = static_cast<VFSDirectory*>(node->getParent());
         if (!oldParent) {
             throw std::runtime_error("Cannot move root directory or node without parent");
-        }   
+        }
 
         std::unique_ptr<VFSNode> extractedChild = oldParent->extractChild(node->getName());
 

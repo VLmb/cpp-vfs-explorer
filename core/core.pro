@@ -4,6 +4,7 @@ CONFIG += staticlib
 TARGET = core
 
 HEADERS += \
+    benchmark/BenchmarkService.h \
     domain/VFSDirectory.h \
     domain/VFSExplorer.h \
     domain/VFSFile.h \

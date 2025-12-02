@@ -14,6 +14,7 @@
 // Путь зависит от INCLUDEPATH, но обычно так:
 #include "../core/domain/VFSExplorer.h"
 #include "../core/utils/ScriptLoader.h"
+#include "../core/benchmark/BenchmarkService.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -76,6 +77,8 @@ private slots:
     void insertSearchCompletion(const QString& completion);
 
     void on_btnCreateFile_clicked();
+
+    void on_btnRunBenchmark_clicked();
 
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;

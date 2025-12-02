@@ -21,10 +21,69 @@
 #include <QLineEdit>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QSpinBox>
 
 
 #include "../core/domain/VFSFile.h"
+#include "../core/benchmark/BenchmarkService.h"
 
+class BenchmarkParamsDialog : public QDialog {
+public:
+    explicit BenchmarkParamsDialog(QWidget* parent = nullptr)
+        : QDialog(parent)
+    {
+        setWindowTitle("Параметры сравнения поисков");
+
+        filesSpin = new QSpinBox(this);
+        itersSpin = new QSpinBox(this);
+
+        filesSpin->setRange(1, 1'000'000);
+        itersSpin->setRange(1, 1'000'000);
+
+        filesSpin->setValue(1000);
+        itersSpin->setValue(100);
+
+        auto* form = new QFormLayout;
+        form->addRow("Количество файлов:",   filesSpin);
+        form->addRow("Количество итераций:", itersSpin);
+
+        auto* buttons = new QDialogButtonBox(
+            QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+            Qt::Horizontal,
+            this
+            );
+
+        auto* defaultButton = new QPushButton("По умолчанию", this);
+
+        connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+        connect(defaultButton, &QPushButton::clicked, this, [this]() {
+            m_useDefault = true;
+            accept();
+        });
+
+        auto* btnLayout = new QHBoxLayout;
+        btnLayout->addWidget(defaultButton);
+        btnLayout->addStretch();
+        btnLayout->addWidget(buttons);
+
+        auto* mainLayout = new QVBoxLayout;
+        mainLayout->addLayout(form);
+        mainLayout->addLayout(btnLayout);
+
+        setLayout(mainLayout);
+    }
+
+    int fileCount() const       { return filesSpin->value(); }
+    int iterationCount() const  { return itersSpin->value(); }
+    bool useDefault() const     { return m_useDefault; }
+
+private:
+    QSpinBox* filesSpin  = nullptr;
+    QSpinBox* itersSpin  = nullptr;
+    bool m_useDefault    = false;
+};
 
 class NodeInfoDialog : public QDialog {
 public:
@@ -998,3 +1057,41 @@ void MainWindow::on_btnCreateFile_clicked()
     }
 }
 
+void MainWindow::on_btnRunBenchmark_clicked()
+{
+    // диалог с параметрами
+    BenchmarkParamsDialog dlg(this);
+
+    int fileCount = 1000;
+    int iterations = 100;
+
+    if (dlg.exec() != QDialog::Accepted) {
+        return; // Cancel / закрыли окно
+    }
+
+    if (!dlg.useDefault()) {
+        fileCount  = dlg.fileCount();
+        iterations = dlg.iterationCount();
+    }
+
+    try {
+        BenchmarkResult res = BenchmarkService::run(explorer, fileCount, iterations);
+        refreshTree();
+
+        long long tTraversal = res.searchByTraversalTime;
+        long long tIndex     = res.searchByIndexTime;
+        long long diff       = tTraversal - tIndex;
+
+        QString msg = QString(
+                          "Время поиска обходом дерева: %1 нс\n"
+                          "Время поиска по индексу:     %2 нс\n"
+                          "Разница:                     %3 нс")
+                          .arg(tTraversal)
+                          .arg(tIndex)
+                          .arg(diff);
+
+        QMessageBox::information(this, "Результат сравнения поисков", msg);
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Ошибка бенчмарка", e.what());
+    }
+}
