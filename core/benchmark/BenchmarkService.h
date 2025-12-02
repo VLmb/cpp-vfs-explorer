@@ -29,6 +29,7 @@ class BenchmarkService {
         try {
             if (std::filesystem::exists(PHYSICAL_TMP_DIR)) {
                 std::filesystem::remove(PHYSICAL_TMP_DIR);
+                std::cout << "Temporary file removed: " << PHYSICAL_TMP_DIR << std::endl;
             }
         } catch (const std::exception& e) {
             std::cerr << "Failed to remove temporary file: " << e.what() << std::endl;

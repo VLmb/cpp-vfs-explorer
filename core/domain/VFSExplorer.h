@@ -99,16 +99,17 @@ class VFSExplorer {
         }
     }
 
-    void removeFromMap(VFSNode* node) {
+    void removeFromTrieAndMap(VFSNode* node) {
         if (!node)
             return;
 
         searchMap.remove(node->getName(), node);
+        trie.erase(node->getName());
 
         if (node->isDirectory()) {
             auto* dir = static_cast<VFSDirectory*>(node);
             for (const auto& child : dir->getChildren()) {
-                removeFromMap(child.get());
+                removeFromTrieAndMap(child.get());
             }
         }
     }
@@ -181,13 +182,19 @@ class VFSExplorer {
         if (!nodeToDelete) {
             throw std::runtime_error("Node does not exist at path: " + fullPath);
         }
-        removeFromMap(nodeToDelete);
-        trie.erase(nodeToDelete->getName());
+        removeFromTrieAndMap(nodeToDelete);
         parentDir->remove(nodeToDelete->getName());
     }
 
     std::vector<VFSNode*> searchByIndex(const std::string& name) const {
         return searchMap.get(name);
+    }
+
+    std::vector<VFSNode*> searchByTraversal(const std::string& name) const {
+        std::vector<VFSNode*> results;
+        searchRecursive(root.get(), name, results);
+
+        return results;
     }
 
     bool renameNode(VFSNode* node, const std::string& newName) {
@@ -211,9 +218,8 @@ class VFSExplorer {
             throw std::runtime_error("A node with the new name already exists in the directory");
         }
 
-        removeFromMap(nodeToRename);
+        removeFromTrieAndMap(nodeToRename);
         nodeToRename->rename(newName);
-        trie.erase(nodeToRename->getName());
         trie.insert(newName);
         searchMap.put(newName, nodeToRename);
 

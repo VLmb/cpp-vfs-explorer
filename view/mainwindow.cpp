@@ -1083,14 +1083,14 @@ void MainWindow::on_btnRunBenchmark_clicked()
         long long diff       = tTraversal - tIndex;
 
         QString msg = QString(
-                          "Время поиска обходом дерева: %1 нс\n"
-                          "Время поиска по индексу:     %2 нс\n"
-                          "Разница:                     %3 нс")
+                          "Время поиска обходом дерева:  %1 ns   \n"
+                          "Время поиска по индексу:      %2 ns   \n"
+                          "Разница:                      %3 ns   ")
                           .arg(tTraversal)
                           .arg(tIndex)
                           .arg(diff);
 
-        QMessageBox::information(this, "Результат сравнения поисков", msg);
+        QMessageBox::information(this, "Результат", msg);
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Ошибка бенчмарка", e.what());
     }
