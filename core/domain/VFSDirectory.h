@@ -9,7 +9,7 @@ class VFSDirectory : public VFSNode {
 private:
     std::vector<std::unique_ptr<VFSNode>> children;
 
-  public:
+public:
     VFSDirectory(std::string name, VFSNode* parent = nullptr)
         : VFSNode(std::move(name), parent), children() {}
 
@@ -25,6 +25,7 @@ private:
 
     void add(std::unique_ptr<VFSNode> node) {
         if (node) {
+            node->setParent(this);
             children.push_back(std::move(node));
         }
     }
@@ -61,5 +62,14 @@ private:
             }
         }
         return nullptr;
+    }
+
+    std::unique_ptr<VFSNode> clone() const override {
+        auto newDir = std::make_unique<VFSDirectory>(this->getName());
+        for (const auto& child : children) {
+            newDir->add(child->clone());
+        }
+
+        return newDir;
     }
 };

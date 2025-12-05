@@ -5,7 +5,10 @@
 #include <memory>
 
 class VFSFile : public VFSNode {
-  public:
+private:
+    std::string physicalPath;
+
+public:
     VFSFile(std::string name, std::string physicalPath, VFSNode* parent = nullptr)
         : VFSNode(std::move(name), parent) {
         if (!std::filesystem::exists(physicalPath)) {
@@ -24,12 +27,13 @@ class VFSFile : public VFSNode {
 
     std::string getPhysicalPath() const { 
         return physicalPath;
-     }
+        }
 
     std::unique_ptr<std::istream> openReadStream() const {
         return std::make_unique<std::ifstream>(physicalPath, std::ios::binary);
     }
 
-  private:
-    std::string physicalPath;
+    std::unique_ptr<VFSNode> clone() const override {
+        return std::make_unique<VFSFile>(this->getName(), this->getPhysicalPath());
+    }
 };

@@ -3,6 +3,11 @@
 #include <string>
 
 class VFSNode {
+protected:
+  std::string name;
+  std::time_t createdAt;
+  VFSNode* parent;
+
   public:
     virtual ~VFSNode() = default;
 
@@ -22,8 +27,5 @@ class VFSNode {
     virtual bool isDirectory() const = 0;
     virtual size_t getSize() const = 0;
 
-  protected:
-    std::string name;
-    std::time_t createdAt;
-    VFSNode* parent;
+    virtual std::unique_ptr<VFSNode> clone() const = 0;
 };

@@ -3,6 +3,9 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #include "../search/FileHashMap.h"
 #include "../search/FileNameTrie.h"
@@ -10,6 +13,8 @@
 #include "VFSDirectory.h"
 #include "VFSFile.h"
 #include "VFSNode.h"
+
+//копирование файла, вырезать, вставить
 
 class VFSExplorer {
   private:
@@ -114,7 +119,7 @@ class VFSExplorer {
         }
     }
 
-  public:
+public:
     VFSExplorer() : root(std::make_unique<VFSDirectory>("root", nullptr)), searchMap(), trie() {}
 
     VFSDirectory* getRoot() const { return root.get(); }
@@ -291,5 +296,73 @@ class VFSExplorer {
 
     std::vector<std::string> getSuggestions(const std::string& prefix) const {
         return trie.autoComplete(prefix);
+    }
+
+    bool copyNode(const VFSNode* node, const std::string& destParentPath, bool replace = false, std::string newName = "") {
+        if (!node) return false;
+
+        VFSNode* destNode = navigateToDirectory(destParentPath);
+        if (!destNode->isDirectory()){
+            throw std::runtime_error("Destination path is not a directory");
+        }
+        auto* destDir = static_cast<VFSDirectory*>(destNode);
+
+        auto cloneNode = node->clone();
+        std::string targetName = cloneNode->getName();
+
+        if (destDir->getChild(targetName) != nullptr) {
+            if (replace) {
+                destDir->remove(targetName);
+            } else {
+                std::string originalName = targetName;
+                int counter = 1;
+                while (destDir->getChild(cloneNode->getName()) != nullptr) {
+                    cloneNode->rename(originalName + "_copy" + std::to_string(counter++));
+                }
+            }
+        }
+
+        if (!newName.empty()) {
+            cloneNode->rename(newName);
+        }
+
+
+        destDir->add(std::move(cloneNode));
+        
+        return true;
+    }
+
+    bool cutNode(VFSNode* node, const std::string& destParentPath, bool replace = false, std::string newName = "") {
+        if (!node) return false;
+
+        VFSNode* destNode = navigateToDirectory(destParentPath);
+        if (!destNode->isDirectory()){
+            throw std::runtime_error("Destination path is not a directory");
+        }
+        auto* destDir = static_cast<VFSDirectory*>(destNode);
+
+        auto cloneNode = node->clone();
+        deleteNode(findVirtualPath(node));
+        std::string targetName = cloneNode->getName();
+
+        if (destDir->getChild(targetName) != nullptr) {
+            if (replace) {
+                destDir->remove(targetName);
+            } else {
+                std::string originalName = targetName;
+                int counter = 1;
+                while (destDir->getChild(cloneNode->getName()) != nullptr) {
+                    cloneNode->rename(originalName + "_copy" + std::to_string(counter++));
+                }
+            }
+        }
+
+        if (!newName.empty()) {
+            cloneNode->rename(newName);
+        }
+
+        destDir->add(std::move(cloneNode));
+        
+        return true;
     }
 };

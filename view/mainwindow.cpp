@@ -1,7 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <QStyle> // Для стандартных иконок
+#include <QStyle>          // стандартные иконки
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -23,10 +23,15 @@
 #include <QDir>
 #include <QSpinBox>
 
-
 #include "../core/domain/VFSFile.h"
 #include "../core/benchmark/BenchmarkService.h"
+#include "../core/domain/VFSDirectory.h"
 
+// Буфер обмена для VFS (статические переменные для эмуляции полей класса)
+static VFSNode* g_clipboardNode = nullptr;
+static bool g_isCutOperation = false;
+
+// диалог параметров для бенчмарка
 class BenchmarkParamsDialog : public QDialog {
 public:
     explicit BenchmarkParamsDialog(QWidget* parent = nullptr)
@@ -85,6 +90,7 @@ private:
     bool m_useDefault    = false;
 };
 
+// диалог свойств узла vfs
 class NodeInfoDialog : public QDialog {
 public:
     NodeInfoDialog(VFSNode* node, VFSExplorer& explorer, QWidget* parent = nullptr)
@@ -94,15 +100,12 @@ public:
     {
         setWindowTitle("Свойства объекта");
 
-        // --- Основные поля ---
         nameValue = new QLabel(QString::fromStdString(node->getName()), this);
         typeValue = new QLabel(node->isDirectory() ? "Каталог" : "Файл", this);
 
-        // Дата создания
         QDateTime dt = QDateTime::fromSecsSinceEpoch(node->getCreationTime());
         createdValue = new QLabel(dt.toString("dd.MM.yyyy hh:mm:ss"), this);
 
-        // Реальный путь — только для файла
         std::string physicalPathStr;
         if (!node->isDirectory()) {
             if (auto* file = dynamic_cast<VFSFile*>(node)) {
@@ -111,7 +114,6 @@ public:
         }
         physicalPathValue = new QLabel(QString::fromStdString(physicalPathStr), this);
 
-        // --- Форма ---
         auto* form = new QFormLayout;
         form->addRow("Имя:", nameValue);
         form->addRow("Тип:", typeValue);
@@ -120,13 +122,11 @@ public:
         }
         form->addRow("Создан:", createdValue);
 
-        // --- Кнопки ---
         auto* openButton   = new QPushButton("Открыть", this);
         auto* renameButton = new QPushButton("Переименовать", this);
         auto* deleteButton = new QPushButton("Удалить", this);
         auto* closeButton  = new QPushButton("Закрыть", this);
 
-        // Открывать имеет смысл только файл с непустым physicalPath
         if (node->isDirectory() || physicalPathStr.empty()) {
             openButton->setEnabled(false);
         }
@@ -143,16 +143,14 @@ public:
         mainLayout->addLayout(buttons);
         setLayout(mainLayout);
 
-        // --- Логика кнопок ---
-
-        // Открыть файл системной программой
+        // открыть файл внешней программой
         connect(openButton, &QPushButton::clicked, this, [physicalPathStr]() {
             if (physicalPathStr.empty()) return;
             QDesktopServices::openUrl(
                 QUrl::fromLocalFile(QString::fromStdString(physicalPathStr)));
         });
 
-        // Переименовать
+        // переименование
         connect(renameButton, &QPushButton::clicked, this, [this]() {
             bool ok = false;
             QString newName = QInputDialog::getText(
@@ -175,8 +173,7 @@ public:
             }
         });
 
-
-        // Удалить
+        // удаление
         connect(deleteButton, &QPushButton::clicked, this, [this]() {
             auto ret = QMessageBox::question(
                 this,
@@ -188,13 +185,12 @@ public:
             try {
                 m_explorer.deleteNode(m_node);
                 m_modified = true;
-                accept(); // закрываем диалог
+                accept();
             } catch (const std::exception& e) {
                 QMessageBox::critical(this, "Ошибка", e.what());
             }
         });
 
-        // Закрыть
         connect(closeButton, &QPushButton::clicked, this, &QDialog::reject);
     }
 
@@ -212,6 +208,7 @@ private:
     bool m_modified = false;
 };
 
+// диалог создания файла (вирт. имя + физ. путь)
 class CreateFileDialog : public QDialog {
 public:
     explicit CreateFileDialog(QWidget* parent = nullptr)
@@ -222,7 +219,6 @@ public:
         m_virtualNameEdit  = new QLineEdit(this);
         m_physicalPathEdit = new QLineEdit(this);
 
-        // Значения по умолчанию
         m_virtualNameEdit->setText("new_file.txt");
         m_physicalPathEdit->setText(QDir::home().filePath("new_file.txt"));
 
@@ -254,35 +250,27 @@ private:
     QLineEdit* m_physicalPathEdit = nullptr;
 };
 
-
-// Конструктор главного окна.
-// Здесь:
-// 1) создаются и настраиваются виджеты из .ui файла (ui->setupUi),
-// 2) берутся стандартные системные иконки,
-// 3) настраивается контекстное меню,
-// 4) первый раз отрисовывается дерево файлов.
+// конструктор главного окна
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
-    // Создаем объект UI и "подшиваем" к этому окну
-    // (инициализирует все поля ui->..., которые описаны в .ui).
     ui->setupUi(this);
 
-    ui->fileTree->setDragEnabled(true);                         // можно тянуть элементы
-    ui->fileTree->setAcceptDrops(true);                         // дерево принимает drop
+    ui->fileTree->setDragEnabled(true);
+    ui->fileTree->setAcceptDrops(true);
     ui->fileTree->setDropIndicatorShown(true);
-    ui->fileTree->setDragDropMode(QAbstractItemView::DragDrop); // и drag, и drop
+    ui->fileTree->setDragDropMode(QAbstractItemView::DragDrop);
     ui->fileTree->viewport()->setAcceptDrops(true);
     ui->fileTree->viewport()->installEventFilter(this);
 
     ui->searchEdit->setPlaceholderText("Введите имя файла...");
 
-    // === Настройка autocomplete ===
+    // настройка autocomplete
     searchModel = new QStringListModel(this);
     searchCompleter = new QCompleter(searchModel, this);
-    searchCompleter->setCompletionMode(QCompleter::PopupCompletion); // выпадающий список
-    searchCompleter->setCaseSensitivity(Qt::CaseInsensitive);        // без учета регистра
+    searchCompleter->setCompletionMode(QCompleter::PopupCompletion);
+    searchCompleter->setCaseSensitivity(Qt::CaseInsensitive);
     searchCompleter->setWrapAround(false);
 
     auto* model = new QStringListModel(searchCompleter);
@@ -302,31 +290,17 @@ MainWindow::MainWindow(QWidget *parent)
             this,
             &MainWindow::insertSearchCompletion);
 
-
-    // Берем стандартные иконки папки и файла из темы оформления системы.
-    // style() — метод QWidget, возвращает текущий QStyle.
-    // standardIcon(...) — дает "стандартную" иконку (папка, файл, диск и т.п.).
     dirIcon = style()->standardIcon(QStyle::SP_DirIcon);
     fileIcon = style()->standardIcon(QStyle::SP_FileIcon);
 
-    // Настройка дерева:
-    // Qt::CustomContextMenu говорит, что контекстное меню (ПКМ)
-    // будет обрабатываться вручную через сигнал customContextMenuRequested.
     ui->fileTree->setContextMenuPolicy(Qt::CustomContextMenu);
 
-    // Связка сигнала и слота:
-    // когда на fileTree вызывается customContextMenuRequested(QPoint),
-    // вызываем наш слот MainWindow::showContextMenu(const QPoint&).
     connect(ui->fileTree, &QTreeWidget::customContextMenuRequested,
             this, &MainWindow::showContextMenu);
 
-    // Первая отрисовка дерева (покажет только root).
-    // Дальше этот метод будет вызываться после любых изменений в VFS.
     refreshTree();
 }
 
-// Деструктор.
-// Здесь важно удалить ui, чтобы освободить все созданные виджеты.
 MainWindow::~MainWindow() {
     delete ui;
 }
@@ -337,81 +311,47 @@ static QString formatSize(std::size_t bytes)
     const double MB = 1024.0 * 1024.0;
 
     if (bytes < 1024) {
-        // Меньше 1 КБ — показываем в байтах
         return QString::number(bytes) + " B";
     } else if (bytes < 1024 * 1024) {
-        // От 1 КБ до 1 МБ — показываем в килобайтах
         double kbValue = bytes / KB;
-        return QString::number(kbValue, 'f', 1) + " KB";  // например, 1.5 KB
+        return QString::number(kbValue, 'f', 1) + " KB";
     } else {
-        // 1 МБ и больше — показываем в мегабайтах
         double mbValue = bytes / MB;
-        return QString::number(mbValue, 'f', 1) + " MB";  // например, 3.2 MB
+        return QString::number(mbValue, 'f', 1) + " MB";
     }
 }
 
-// ==========================================
-// ОТРИСОВКА (Core -> View)
-// ==========================================
-
-// Полностью перерисовывает дерево файлов.
-// Берет корень из VFSExplorer, создает root-элемент дерева,
-// рекурсивно добавляет все дочерние узлы.
+// полная перерисовка дерева
 void MainWindow::refreshTree() {
-    // Удаляем все элементы из QTreeWidget.
     ui->fileTree->clear();
 
-    // Получаем корень виртуальной файловой системы.
     VFSDirectory* root = explorer.getRoot();
 
-    // Создаем элемент для корня в QTreeWidget.
-    // Конструктор QTreeWidgetItem(ui->fileTree) автоматически добавляет
-    // item как верхнеуровневый элемент в дерево.
     QTreeWidgetItem* rootItem = new QTreeWidgetItem(ui->fileTree);
-
-    // В первой колонке (column 0) показываем имя корня — "/".
     rootItem->setText(0, "/");
-
-    // Ставим иконку "папка" для корня.
     rootItem->setIcon(0, dirIcon);
 
-    // Сохраняем указатель на реальный узел (VFSDirectory) в элемент дерева.
-    // setData(column, role, value) позволяет хранить произвольные данные.
-    // Qt::UserRole — роль "для пользователя".
-    // QVariant::fromValue(static_cast<void*>(root)) — кладем сырый указатель как void*.
-    // (Это опционально, но удобно, если потом захочешь доставать VFSNode напрямую из item.)
     rootItem->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<void*>(root)));
 
-    // Рекурсивно добавляем все дочерние элементы.
     addTreeItemsRecursive(root, rootItem);
 
-    // Раскрываем корень, чтобы сразу видеть его содержимое.
     rootItem->setExpanded(true);
     ui->fileTree->expandAll();
 }
 
-// Рекурсивно обходит дерево VFS и создает элементы в QTreeWidget.
-// node — текущий виртуальный узел,
-// parentItem — соответствующий родительский элемент в дереве Qt.
+// рекурсивное заполнение дерева на основе vfs
 void MainWindow::addTreeItemsRecursive(VFSNode* node, QTreeWidgetItem* parentItem) {
-    // Если узел не директория — дальше нечего обходить (у файлов нет детей).
     if (!node->isDirectory()) return;
 
-    // Приводим базовый указатель VFSNode* к VFSDirectory* (мы уверены, что это папка).
     VFSDirectory* dir = static_cast<VFSDirectory*>(node);
 
-    // Здесь можно было бы отсортировать детей (по имени, по размеру и т.д.),
-    // но children хранятся как std::unique_ptr<VFSNode>, что усложняет сортировку.
-    // Поэтому сейчас просто идем в текущем порядке.
-
-    // dir->getChildren() возвращает ссылку на контейнер с дочерними узлами.
     for (const auto& child : dir->getChildren()) {
         QTreeWidgetItem* item = new QTreeWidgetItem(parentItem);
 
         item->setText(0, QString::fromStdString(child->getName()));
         item->setText(1, formatSize(child->getSize()));
 
-        // ВАЖНО: привязываем VFSNode* к item
+        // привязываем указатель на vfs-узел
         item->setData(0, Qt::UserRole,
                       QVariant::fromValue(static_cast<void*>(child.get())));
 
@@ -434,83 +374,50 @@ void MainWindow::addSearchResultItem(VFSNode* node, const QString& tag)
     }
     item->setText(text);
 
-    // Привязка VFSNode*
     item->setData(Qt::UserRole,
                   QVariant::fromValue(static_cast<void*>(node)));
 
-    // Можно повесить tooltip
+    // простой tooltip, пока путь заглушка
     QString tooltip = QString("Имя: %1\nПуть: %2")
                           .arg(QString::fromStdString(node->getName()))
                           .arg(QString::fromStdString("..."));
     item->setToolTip(tooltip);
 }
 
-// ==========================================
-// ЛОГИКА (View -> Core)
-// ==========================================
-
-// Вспомогательная функция: собирает полный виртуальный путь
-// выбранного элемента в дереве, поднимаясь от него к корню.
-// Пример: если пользователь выделил "docs/hello.txt", вернет "/docs/hello.txt".
+// восстановление полного виртуального пути из выбранного item
 std::string MainWindow::getCurrentPath() {
-    // currentItem() — текущий выделенный элемент в QTreeWidget.
     QTreeWidgetItem* item = ui->fileTree->currentItem();
 
-    // Если ничего не выбрано — считаем, что работаем с корнем "/".
     if (!item) return "/";
 
-    // parts будет хранить имена всех узлов от корня до выбранного (без "/").
     QStringList parts;
 
-    // Идем от текущего элемента вверх по дереву через parent().
     while (item) {
-        // Берем текст в колонке 0 (имя узла).
         QString text = item->text(0);
-
-        // Если дошли до корня ("/") — дальше подниматься не нужно.
         if (text == "/") break;
 
-        // Добавляем имя в начало списка (prepend),
-        // чтобы потом получить правильный порядок: root/child/subchild.
         parts.prepend(text);
-
-        // Переходим к родителю.
         item = item->parent();
     }
 
-    // Если parts пустой — значит, это корень.
     if (parts.isEmpty()) return "/";
 
-    // Склеиваем имена через "/" и добавляем ведущий "/".
-    // Например, parts = ["home", "user"] -> "/home/user".
     return "/" + parts.join("/").toStdString();
 }
 
-// Слот для кнопки "Создать папку".
-// 1) Определяет текущий путь (getCurrentPath),
-// 2) спрашивает имя новой папки через QInputDialog,
-// 3) вызывает explorer.createDirectory,
-// 4) перерисовывает дерево.
+// создание папки
 void MainWindow::on_btnCreateFolder_clicked() {
-    // 1. Узнаем, в какой директории создавать новую папку.
     std::string currentPath = getCurrentPath();
 
-    // 2. Спрашиваем у пользователя имя папки через модальный диалог.
     bool ok;
     QString text = QInputDialog::getText(this, "Новая папка",
                                          "Имя папки:", QLineEdit::Normal,
                                          "NewFolder", &ok);
-    // ok == true, если пользователь нажал ОК.
-    // text.isEmpty() — если строка пустая.
     if (ok && !text.isEmpty()) {
         try {
-            // 3. Вызываем логику (CORE).
             explorer.createDirectory(currentPath, text.toStdString());
-
-            // 4. Обновляем UI, чтобы новая папка появилась в дереве.
             refreshTree();
         } catch (const std::exception& e) {
-            // В случае ошибки показываем диалог критической ошибки.
             QMessageBox::critical(this, "Ошибка", e.what());
         }
     }
@@ -518,97 +425,64 @@ void MainWindow::on_btnCreateFolder_clicked() {
 
 void MainWindow::on_btnInitFS_clicked()
 {
-    // Инициализируем виртуальную ФС по скрипту
-    ScriptLoader::load(explorer);          // путь по умолчанию: resources/script.txt
+    ScriptLoader::load(explorer);
 
-    // Обновляем дерево, чтобы сразу увидеть созданные папки/файлы
     refreshTree();
 
-    // Делаем кнопку неактивной, чтобы её нельзя было нажать второй раз
     ui->btnInitFS->setEnabled(false);
 
-    // (опционально) можно вывести пользователю сообщение:
     QMessageBox::information(this, "Инициализация", "Файловая система инициализирована.");
 }
 
-// Слот для кнопки "Добавить файл" (монтирование реального файла).
-// 1) Определяет текущий виртуальный путь,
-// 2) открывает QFileDialog для выбора реального файла,
-// 3) создает виртуальный файл в VFSExplorer и перерисовывает дерево.
+// добавление реального файла в vfs
 void MainWindow::on_btnMountFile_clicked() {
     std::string currentPath = getCurrentPath();
 
-    // Диалог выбора реального файла.
-    // this — родительское окно, "Выберите файл" — заголовок,
-    // QDir::homePath() — стартовая директория (домашняя).
     QString physicalPath = QFileDialog::getOpenFileName(this, "Выберите файл", QDir::homePath());
 
-    // Если пользователь нажал "Отмена" — строка будет пустой.
     if (physicalPath.isEmpty()) return;
 
-    // QFileInfo даёт доступ к различным частям пути:
-    // имя файла, расширение, абсолютный путь и т.д.
     QFileInfo fileInfo(physicalPath);
-
-    // Имя виртуального файла по умолчанию — просто имя реального файла.
     QString virtName = fileInfo.fileName();
 
     try {
-        // Создаем файл в виртуальной ФС, передавая:
-        // 1) виртуальный путь (директория),
-        // 2) виртуальное имя,
-        // 3) реальный путь к файлу.
         explorer.addFile(currentPath, virtName.toStdString(), physicalPath.toStdString());
-
-        // Перерисовываем дерево после изменения.
         refreshTree();
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Ошибка", e.what());
     }
 }
 
-// Слот для кнопки "Удалить".
-// Удаляет текущий выбранный узел (файл или папку) в виртуальной ФС.
+// удаление выделенного узла
 void MainWindow::on_btnDelete_clicked() {
     std::string currentPath = getCurrentPath();
 
-    // Защита от удаления корня.
     if (currentPath == "/") {
         QMessageBox::warning(this, "Стоп", "Нельзя удалить корень!");
         return;
     }
 
     try {
-        // Удаляем узел по пути.
         explorer.deleteNode(currentPath);
-
-        // Перерисовываем дерево.
         refreshTree();
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Ошибка", e.what());
     }
 }
 
-// ==========================================
-// ПОИСК
-// ==========================================
-
-// Слот, вызывается при каждом изменении текста в поле поиска.
-// Планируется использовать для автодополнения по Trie.
+// обработка изменения текста поиска (автодополнение)
 void MainWindow::on_searchEdit_textChanged(const QString &arg1) {
     if (!searchCompleter) return;
 
     std::string prefixStd = arg1.toStdString();
 
     if (prefixStd.empty() || prefixStd.length() < 3) {
-        // мало символов — просто прячем popup
         auto* model = qobject_cast<QStringListModel*>(searchCompleter->model());
         if (model) model->setStringList(QStringList());
         searchCompleter->popup()->hide();
         return;
     }
 
-    // Получаем подсказки из VFSExplorer
     std::vector<std::string> suggestions = explorer.getSuggestions(prefixStd);
 
     QStringList list;
@@ -627,16 +501,11 @@ void MainWindow::on_searchEdit_textChanged(const QString &arg1) {
     }
 
     model->setStringList(list);
-
-    // ВАЖНО: префикс = то, что пользователь ввёл, а не текущая выбранная строка
     searchCompleter->setCompletionPrefix(arg1);
-
-    // Показываем popup — для QLineEdit можно просто complete() без rect
     searchCompleter->complete();
 }
 
-// Слот "Быстрый поиск" (по Hash Map / индексу).
-// Измеряет время поиска и показывает количество найденных файлов.
+// быстрый поиск по индексу
 void MainWindow::on_btnSearchFast_clicked() {
     QString query = ui->searchEdit->text();
     if (query.isEmpty()) return;
@@ -658,6 +527,7 @@ void MainWindow::on_btnSearchFast_clicked() {
     QMessageBox::information(this, "Результат", msg);
 }
 
+// медленный поиск обходом дерева
 void MainWindow::on_btnSearchSlow_clicked() {
     QString query = ui->searchEdit->text();
     ui->searchResultList->clear();
@@ -681,54 +551,181 @@ void MainWindow::showNodeInfo(VFSNode* node)
     if (!node) return;
 
     NodeInfoDialog dlg(node, explorer, this);
-    dlg.exec();                      // просто ждём закрытия
+    dlg.exec();
 
-    if (!dlg.isModified()) {         // ничего не меняли — выходим
+    if (!dlg.isModified()) {
         return;
     }
 
-    // что-то изменили (rename/delete) — перерисовываем и разворачиваем
     refreshTree();
 }
 
-
-
-// Контекстное меню для дерева файлов.
-// Вызывается, когда пользователь нажимает ПКМ по QTreeWidget
-// (сигнал customContextMenuRequested).
+// контекстное меню по правому клику по дереву
 void MainWindow::showContextMenu(const QPoint &pos) {
-    // Создаем контекстное меню. tr() — для поддержки переводов.
     QMenu contextMenu(tr("Context menu"), this);
 
+    // --- Стандартные действия ---
     QAction actionRename("Переименовать", this);
     connect(&actionRename, &QAction::triggered, this, &MainWindow::on_btnRename_clicked);
     contextMenu.addAction(&actionRename);
 
-    // Действие "Создать папку".
     QAction actionCreate("Создать папку", this);
-    // Привязываем сигнал triggered() к уже существующему слоту создания папки.
     connect(&actionCreate, &QAction::triggered, this, &MainWindow::on_btnCreateFolder_clicked);
     contextMenu.addAction(&actionCreate);
 
-    // Действие "Добавить файл".
     QAction actionMount("Добавить файл", this);
     connect(&actionMount, &QAction::triggered, this, &MainWindow::on_btnMountFile_clicked);
     contextMenu.addAction(&actionMount);
 
-    // Действие "Удалить".
     QAction actionDel("Удалить", this);
     connect(&actionDel, &QAction::triggered, this, &MainWindow::on_btnDelete_clicked);
     contextMenu.addAction(&actionDel);
 
-    // Показываем меню в глобальных координатах экрана.
-    // mapToGlobal(pos) переводит координаты относительно виджета
-    // в координаты всего экрана.
+    contextMenu.addSeparator();
+
+    // --- Действия буфера обмена ---
+
+    // КОПИРОВАТЬ
+    QAction* actionCopy = new QAction("Копировать", this);
+    connect(actionCopy, &QAction::triggered, this, [this]() {
+        QTreeWidgetItem* item = ui->fileTree->currentItem();
+        if (!item) return;
+        QVariant v = item->data(0, Qt::UserRole);
+        g_clipboardNode = static_cast<VFSNode*>(v.value<void*>());
+        g_isCutOperation = false;
+    });
+    contextMenu.addAction(actionCopy);
+
+    // ВЫРЕЗАТЬ
+    QAction* actionCut = new QAction("Вырезать", this);
+    connect(actionCut, &QAction::triggered, this, [this]() {
+        QTreeWidgetItem* item = ui->fileTree->currentItem();
+        if (!item) return;
+        QVariant v = item->data(0, Qt::UserRole);
+        g_clipboardNode = static_cast<VFSNode*>(v.value<void*>());
+        g_isCutOperation = true;
+    });
+    contextMenu.addAction(actionCut);
+
+    // ВСТАВИТЬ
+    QAction* actionPaste = new QAction("Вставить", this);
+
+    // Делаем кнопку активной только если что-то есть в буфере
+    if (!g_clipboardNode) {
+        actionPaste->setEnabled(false);
+    }
+
+    connect(actionPaste, &QAction::triggered, this, [this]() {
+        if (!g_clipboardNode) return;
+
+        QTreeWidgetItem* targetItem = ui->fileTree->currentItem();
+        VFSDirectory* destDir = getTargetDirForItem(targetItem);
+        if (!destDir) return;
+
+        std::string destPath = explorer.findVirtualPath(destDir);
+        std::string originalName = g_clipboardNode->getName();
+
+        // 1. ПРОВЕРКА НА РЕКУРСИЮ (Папка в себя или в подпапку)
+        // Если мы пытаемся вставить папку, нужно убедиться, что destPath не начинается с пути этой папки.
+        if (g_clipboardNode->isDirectory()) {
+            std::string srcPath = explorer.findVirtualPath(g_clipboardNode);
+            // Добавляем слэш, чтобы избежать ложных срабатываний (напр. /Folder и /Folder2)
+            std::string srcCheck = srcPath + "/";
+            std::string dstCheck = destPath + "/";
+
+            // Если путь назначения содержит путь источника или они равны
+            if (destDir == g_clipboardNode || dstCheck.find(srcCheck) == 0) {
+                QMessageBox::warning(this, "Ошибка", "Невозможно переместить папку внутрь самой себя или своего подкаталога.");
+                return;
+            }
+        }
+
+        // 2. ПРОВЕРКА НА КОНФЛИКТ ИМЕН
+        bool exists = (destDir->getChild(originalName) != nullptr);
+
+        if (exists) {
+            // --- Если файл существует, спрашиваем пользователя ---
+            QMessageBox msgBox(this);
+            msgBox.setWindowTitle("Конфликт имен");
+            msgBox.setText("Объект с именем \"" + QString::fromStdString(originalName) + "\" уже существует.");
+            msgBox.setInformativeText("Выберите действие:");
+
+            QAbstractButton* btnReplace = msgBox.addButton("Заменить", QMessageBox::YesRole);
+            QAbstractButton* btnJustCopy = msgBox.addButton("Создать копию", QMessageBox::NoRole);
+            QAbstractButton* btnRename  = msgBox.addButton("Переименовать", QMessageBox::NoRole);
+            msgBox.addButton("Отмена", QMessageBox::RejectRole);
+
+            msgBox.exec();
+
+            try {
+                if (msgBox.clickedButton() == btnReplace) {
+                    // ЗАМЕНИТЬ (replace = true)
+                    if (g_isCutOperation) {
+                        explorer.cutNode(g_clipboardNode, destPath, true);
+                        g_clipboardNode = nullptr;
+                    } else {
+                        explorer.copyNode(g_clipboardNode, destPath, true);
+                    }
+                }
+                else if (msgBox.clickedButton() == btnRename) {
+                    // ПЕРЕИМЕНОВАТЬ (ввод нового имени)
+                    bool ok = false;
+                    QString newName = QInputDialog::getText(
+                        this,
+                        "Новое имя",
+                        "Введите имя:",
+                        QLineEdit::Normal,
+                        "",
+                        &ok
+                        );
+
+                    if (ok && !newName.isEmpty()) {
+                        if (g_isCutOperation) {
+                            explorer.cutNode(g_clipboardNode, destPath, false, newName.toStdString());
+                            g_clipboardNode = nullptr;
+                        } else {
+                            explorer.copyNode(g_clipboardNode, destPath, false, newName.toStdString());
+                        }
+                    }
+                }
+                else if (msgBox.clickedButton() == btnJustCopy) {
+                    // СОЗДАТЬ КОПИЮ (replace = false, newName = "")
+                    // Backend сам создаст имя_copy1
+                    if (g_isCutOperation) {
+                        explorer.cutNode(g_clipboardNode, destPath, false);
+                        g_clipboardNode = nullptr;
+                    } else {
+                        explorer.copyNode(g_clipboardNode, destPath, false);
+                    }
+                }
+                // Если нажали Отмена — ничего не делаем
+            } catch (const std::exception& e) {
+                QMessageBox::critical(this, "Ошибка операции", e.what());
+            }
+
+        } else {
+            // --- ЭТОТ БЛОК ОТСУТСТВОВАЛ ИЛИ БЫЛ НЕ ТАМ ---
+            // Если конфликта нет, просто выполняем вставку
+            try {
+                if (g_isCutOperation) {
+                    explorer.cutNode(g_clipboardNode, destPath, false);
+                    g_clipboardNode = nullptr;
+                } else {
+                    explorer.copyNode(g_clipboardNode, destPath, false);
+                }
+            } catch (const std::exception& e) {
+                QMessageBox::critical(this, "Ошибка операции", e.what());
+            }
+        }
+
+        refreshTree();
+        ui->fileTree->expandAll();
+    });
+    contextMenu.addAction(actionPaste);
+
     contextMenu.exec(ui->fileTree->mapToGlobal(pos));
 }
 
-// Слот, вызывается при клике по элементу списка результатов поиска.
-// Сейчас пустой — сюда можно добавить логику:
-// например, найти соответствующий элемент в дереве и выделить его.
 void MainWindow::on_searchResultList_itemClicked(QListWidgetItem *item) {
     if (!item) return;
 
@@ -776,7 +773,6 @@ void MainWindow::on_btnRename_clicked()
     if (!ok || newName.isEmpty()) return;
 
     try {
-        // такой же вызов, как в диалоге
         explorer.renameNode(node, newName.toStdString());
 
         refreshTree();
@@ -799,7 +795,6 @@ void MainWindow::on_btnCopyPath_clicked()
     auto* node = static_cast<VFSNode*>(v.value<void*>());
     if (!node) return;
 
-    // Путь есть только у файла
     auto* file = dynamic_cast<VFSFile*>(node);
     if (!file) {
         QMessageBox::warning(this, "Копирование пути",
@@ -817,13 +812,14 @@ void MainWindow::on_btnCopyPath_clicked()
     QClipboard* cb = QGuiApplication::clipboard();
     cb->setText(path);
 
-    // опционально — уведомление
     QMessageBox::information(this, "Копирование пути",
                              "Путь скопирован в буфер обмена:\n" + path);
 }
 
+// тут фильтруем события для поиска и d&d по дереву
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
+    // автодополнение по enter/tab
     if (obj == ui->searchEdit &&
         event->type() == QEvent::KeyPress &&
         searchCompleter && searchCompleter->popup()->isVisible()) {
@@ -846,18 +842,17 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 insertSearchCompletion(completion);
             }
 
-            return true; // событие съели
+            return true;
         }
     }
 
     if (obj == ui->fileTree->viewport()) {
 
-        // DRAG ENTER
+        // drag enter
         if (event->type() == QEvent::DragEnter) {
             auto* de = static_cast<QDragEnterEvent*>(event);
             const QMimeData* mime = de->mimeData();
 
-            // Внешние файлы (urls) или внутренний drag от самого дерева
             auto* src = de->source();
             if (mime->hasUrls()
                 || src == ui->fileTree
@@ -867,7 +862,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
             }
         }
 
-        // DRAG MOVE
+        // drag move
         if (event->type() == QEvent::DragMove) {
             auto* dm = static_cast<QDragMoveEvent*>(event);
             const QMimeData* mime = dm->mimeData();
@@ -881,7 +876,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
             }
         }
 
-        // DROP
+        // drop
         if (event->type() == QEvent::Drop) {
             auto* drop = static_cast<QDropEvent*>(event);
             const QMimeData* mime = drop->mimeData();
@@ -893,28 +888,24 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 #endif
             QTreeWidgetItem* targetItem = ui->fileTree->itemAt(vpPos);
 
-            // ---- 4.1 Внутренний d&d (из нашего дерева) ----
+            // внутренний d&d по дереву
             if (drop->source() == ui->fileTree) {
-                // Перетаскивали что-то из дерева
                 QTreeWidgetItem* draggedItem = ui->fileTree->currentItem();
                 if (!draggedItem) {
                     return false;
                 }
 
-                // Узел, который переносим
                 QVariant dv = draggedItem->data(0, Qt::UserRole);
                 auto* draggedNode = static_cast<VFSNode*>(dv.value<void*>());
                 if (!draggedNode) {
                     return false;
                 }
 
-                // Куда переносим — директория назначения
                 VFSDirectory* targetDirNode = getTargetDirForItem(targetItem);
                 if (!targetDirNode) {
                     return false;
                 }
 
-                // Можно защититься от перемещения корня
                 if (draggedNode == explorer.getRoot()) {
                     QMessageBox::warning(this, "Перемещение",
                                          "Нельзя перемещать корневой каталог.");
@@ -927,7 +918,6 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                     ui->fileTree->expandAll();
                 } catch (const std::exception& e) {
                     QMessageBox::critical(this, "Ошибка перемещения", e.what());
-                    // На всякий случай вернуть дерево в консистентное состояние
                     refreshTree();
                     ui->fileTree->expandAll();
                 }
@@ -936,12 +926,9 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 return true;
             }
 
-            // ---- 4.2 Внешний d&d (из проводника) ----
+            // внешний d&d из проводника
             if (mime->hasUrls()) {
                 VFSDirectory* targetDirNode = getTargetDirForItem(targetItem);
-                // Для addFile у тебя, скорее всего, нужен путь, а не VFSDirectory*,
-                // тут можно использовать explorer.findVirtualPath(targetDirNode),
-                // если такой метод есть.
                 std::string targetDirPath = explorer.findVirtualPath(targetDirNode);
 
                 for (const QUrl& url : mime->urls()) {
@@ -955,8 +942,8 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 
                     try {
                         explorer.addFile(targetDirPath,
-                                            virtName.toStdString(),
-                                            physicalPath.toStdString());
+                                         virtName.toStdString(),
+                                         physicalPath.toStdString());
                     } catch (const std::exception& e) {
                         QMessageBox::critical(this, "Ошибка при импорте файла", e.what());
                     }
@@ -968,18 +955,16 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
                 drop->acceptProposedAction();
                 return true;
             }
-
-            // Ни внутренний, ни внешние файлы — игнорируем
         }
     }
 
     return QMainWindow::eventFilter(obj, event);
 }
 
+// определяем, в какую директорию кидать d&d
 VFSDirectory* MainWindow::getTargetDirForItem(QTreeWidgetItem* item)
 {
     if (!item) {
-        // Бросили "в пустоту" → корень
         return explorer.getRoot();
     }
 
@@ -990,11 +975,9 @@ VFSDirectory* MainWindow::getTargetDirForItem(QTreeWidgetItem* item)
     }
 
     if (node->isDirectory()) {
-        // Кидаем прямо в эту директорию
         return static_cast<VFSDirectory*>(node);
     }
 
-    // Если это файл — берём его родительский item (директорию)
     QTreeWidgetItem* parentItem = item->parent();
     if (!parentItem) {
         return explorer.getRoot();
@@ -1009,6 +992,7 @@ VFSDirectory* MainWindow::getTargetDirForItem(QTreeWidgetItem* item)
     return static_cast<VFSDirectory*>(parentNode);
 }
 
+// вставка выбранного completion в строку поиска
 void MainWindow::insertSearchCompletion(const QString& completion)
 {
     if (!searchCompleter || searchCompleter->widget() != ui->searchEdit) {
@@ -1025,12 +1009,11 @@ void MainWindow::insertSearchCompletion(const QString& completion)
 
 void MainWindow::on_btnCreateFile_clicked()
 {
-    // В какой виртуальной директории создаём
     std::string currentPath = getCurrentPath();
 
     CreateFileDialog dlg(this);
     if (dlg.exec() != QDialog::Accepted) {
-        return; // нажали Cancel/закрыли окно
+        return;
     }
 
     QString vName        = dlg.virtualName();
@@ -1057,16 +1040,16 @@ void MainWindow::on_btnCreateFile_clicked()
     }
 }
 
+// запуск бенчмарка двух поисков
 void MainWindow::on_btnRunBenchmark_clicked()
 {
-    // диалог с параметрами
     BenchmarkParamsDialog dlg(this);
 
     int fileCount = 1000;
     int iterations = 100;
 
     if (dlg.exec() != QDialog::Accepted) {
-        return; // Cancel / закрыли окно
+        return;
     }
 
     if (!dlg.useDefault()) {
